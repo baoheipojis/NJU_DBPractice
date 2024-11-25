@@ -26,12 +26,66 @@ namespace wsdb {
 
 LRUReplacer::LRUReplacer() : cur_size_(0), max_size_(BUFFER_POOL_SIZE) {}
 
-auto LRUReplacer::Victim(frame_id_t *frame_id) -> bool { WSDB_STUDENT_TODO(l1, t1); }
 
-void LRUReplacer::Pin(frame_id_t frame_id) { WSDB_STUDENT_TODO(l1, t1); }
+auto LRUReplacer::Victim(frame_id_t *frame_id) -> bool {
+//    LRU是最近最少用，需要记录一个"最后访问时间"，然后淘汰掉这个时间最靠前的。
+    if (cur_size_< max_size_) {
+//        如果缓存池还没有满，那就直接返回false
+        return false;
+    }
+//    如果满了，那么就清除第一个即可。
+    for(auto it = lru_list_.begin(); it!=lru_list_.end(); it++){
+        auto a=*it;
+        if(a.second == false){
+//            如果它不能被淘汰，那么就看下一个
+            continue;
+        }else{
+            *frame_id = a.first;
+//            然后把它淘汰
+            lru_list_.erase(it);
+            cur_size_--;
+            lru_hash_.erase(*frame_id);
+            return true;
+        }
+    }
+//    说明所有的frame都是pinned，无法被淘汰
+    return false;
+}
+    // 新增方法：查找特定 frame_id 的元素
+    bool FindFrame(frame_id_t frame_id, std::pair<frame_id_t, bool> &result);
 
-void LRUReplacer::Unpin(frame_id_t frame_id) { WSDB_STUDENT_TODO(l1, t1); }
+void LRUReplacer::Pin(frame_id_t frame_id) {
+//    这里的it是一个键值对，it->first是frame_id，it->second是bool值
+    auto it = lru_hash_.find(frame_id);
+    if (it != lru_hash_.end()) {
+        // 从链表中移除该帧
+        lru_list_.erase(it->second);
+        cur_size_--;
+    }
+//   这里pin可能要调用victim，具体未知，需要测试后再知道。
+    lru_list_.push_back(std::make_pair(frame_id, false));
+    lru_hash_[frame_id] = lru_list_.insert(lru_list_.end(), std::make_pair(frame_id, false));
+    cur_size_++;
+}
 
-auto LRUReplacer::Size() -> size_t { WSDB_STUDENT_TODO(l1, t1); }
+void LRUReplacer::Unpin(frame_id_t frame_id) {
+//    其实就是把这个frame_id的bool值改为true，表示可以被移除了。
+    auto it = lru_hash_.find(frame_id);
+    if (it != lru_hash_.end()) {
+        it->second->second = true;
+    }else{
+        return;
+    }
+}
+
+auto LRUReplacer::Size() -> size_t {
+    int size = 0;
+    for(auto it = lru_list_.begin(); it!=lru_list_.end(); it++){
+        if(it->second == true){
+            size++;
+        }
+    }
+    return size;
+}
 
 }  // namespace wsdb
