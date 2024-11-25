@@ -29,10 +29,10 @@ LRUReplacer::LRUReplacer() : cur_size_(0), max_size_(BUFFER_POOL_SIZE) {}
 
 auto LRUReplacer::Victim(frame_id_t *frame_id) -> bool {
 //    LRU是最近最少用，需要记录一个"最后访问时间"，然后淘汰掉这个时间最靠前的。
-    if (cur_size_< max_size_) {
-//        如果缓存池还没有满，那就直接返回false
-        return false;
-    }
+//    if (cur_size_< max_size_) {
+////        如果缓存池还没有满，那就直接返回false
+//        return false;
+//    }
 //    如果满了，那么就清除第一个即可。
     for(auto it = lru_list_.begin(); it!=lru_list_.end(); it++){
         auto a=*it;
@@ -55,6 +55,8 @@ auto LRUReplacer::Victim(frame_id_t *frame_id) -> bool {
     bool FindFrame(frame_id_t frame_id, std::pair<frame_id_t, bool> &result);
 
 void LRUReplacer::Pin(frame_id_t frame_id) {
+    std::lock_guard<std::mutex> lock(latch_);  // 获取锁
+
 //    这里的it是一个键值对，it->first是frame_id，it->second是bool值
     auto it = lru_hash_.find(frame_id);
     if (it != lru_hash_.end()) {
@@ -69,6 +71,8 @@ void LRUReplacer::Pin(frame_id_t frame_id) {
 }
 
 void LRUReplacer::Unpin(frame_id_t frame_id) {
+    std::lock_guard<std::mutex> lock(latch_);  // 获取锁
+
 //    其实就是把这个frame_id的bool值改为true，表示可以被移除了。
     auto it = lru_hash_.find(frame_id);
     if (it != lru_hash_.end()) {
