@@ -80,9 +80,6 @@ TEST(BufferPoolManagerTest, SimpleTest)
     }
     for (int i = 0; i < MAX_PAGES; ++i) {
       page_data[i] = std::to_string(i);
-      if(i==7){
-
-      }
       page         = buffer_pool_manager.FetchPage(fd, i);
       ASSERT_NE(page, nullptr);
       ASSERT_EQ(page->GetFileId(), fd);
@@ -92,9 +89,6 @@ TEST(BufferPoolManagerTest, SimpleTest)
       buffer_pool_manager.UnpinPage(fd, i, true);
     }
     for (int i = 0; i < MAX_PAGES; ++i) {
-        if(i==7){
-
-        }
       page = buffer_pool_manager.FetchPage(fd, i);
       ASSERT_NE(page, nullptr);
       ASSERT_EQ(page->GetFileId(), fd);

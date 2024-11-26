@@ -73,8 +73,8 @@ auto BufferPoolManager::UnpinPage(file_id_t fid, page_id_t pid, bool is_dirty) -
     if (frame == nullptr||!frame->InUse()) return false;
     frame->Unpin();
     if(is_dirty){
-        lock.unlock();
-        FlushPage(fid, pid);
+//        lock.unlock();
+//        FlushPage(fid, pid);
         fid_pid_t key = {fid, pid};
         frame_id_t frameId = page_frame_lookup_[key];
         frame->SetDirty(is_dirty);
@@ -120,10 +120,14 @@ auto BufferPoolManager::FlushPage(file_id_t fid, page_id_t pid) -> bool {
 //    WSDB_STUDENT_TODO(l1, t2);
     std::unique_lock<std::mutex> lock(latch_);
     auto frame = GetFrame(fid, pid);
+    if(pid==7){
+
+    }
     if (frame == nullptr) return false;
-//    if(frame->IsDirty()){
+
+    if(frame->IsDirty()){
         disk_manager_->WritePage(fid, pid, frames_[page_frame_lookup_[{fid, pid}]].GetPage()->GetData());
-//    }
+    }
     return true;
 }
 
@@ -156,12 +160,13 @@ void BufferPoolManager::UpdateFrame(frame_id_t frame_id, file_id_t fid, page_id_
     auto frame = &frames_[frame_id];
     file_id_t old_fid=frame->GetPage()->GetFileId();
     page_id_t old_pid=frame->GetPage()->GetPageId();
-    page_frame_lookup_.erase({old_fid, old_pid});
-//    if(frame->IsDirty()){
+    if(frame->IsDirty()){
 //        如果旧页是脏的，那么写回
         FlushPage(old_fid, old_pid);
-//    }
+
+    }
 //    注意，这里还需要删除所有page_frame_lookup中的值。
+    page_frame_lookup_.erase({old_fid, old_pid});
 
     frame->Reset();
     char data[PAGE_SIZE];
