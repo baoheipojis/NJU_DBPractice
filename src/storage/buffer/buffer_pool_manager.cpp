@@ -55,6 +55,7 @@ auto BufferPoolManager::FetchPage(file_id_t fid, page_id_t pid) -> Page * {
     replacer_->Pin(frameId);
     return frame->GetPage();
     } else{
+//        缺页，需要读数据
         frame_id_t frame_id = GetAvailableFrame();
         lock.unlock();
         UpdateFrame(frame_id, fid, pid);
@@ -151,22 +152,23 @@ auto BufferPoolManager::GetAvailableFrame() -> frame_id_t {
 void BufferPoolManager::UpdateFrame(frame_id_t frame_id, file_id_t fid, page_id_t pid) {
 //    WSDB_STUDENT_TODO(l1, t2);
     auto frame = &frames_[frame_id];
-    if(frame->IsDirty()){
-        FlushPage(fid, pid);
-    }
-//    注意，这里还需要删除所有page_frame_lookup中的值。
     file_id_t old_fid=frame->GetPage()->GetFileId();
     page_id_t old_pid=frame->GetPage()->GetPageId();
     page_frame_lookup_.erase({old_fid, old_pid});
+    if(frame->IsDirty()){
+        FlushPage(old_fid, old_pid);
+    }
+//    注意，这里还需要删除所有page_frame_lookup中的值。
+
     frame->Reset();
-    disk_manager_->ReadPage(fid, pid, frame->GetPage()->GetData());
+    char data[PAGE_SIZE];
+    disk_manager_->ReadPage(fid, pid, data);
+    strcpy(frame->GetPage()->GetData(),data);
     frame->GetPage()->SetFilePageId(fid, pid);
     frame->SetDirty(false);
     frame->Pin();
     replacer_->Pin(frame_id);
-    if(fid==3&&pid==58){
 
-    }
     page_frame_lookup_.insert({{fid, pid}, frame_id});
 }
 
