@@ -30,7 +30,7 @@ LRUReplacer::LRUReplacer() : cur_size_(0), max_size_(BUFFER_POOL_SIZE) {}
 auto LRUReplacer::Victim(frame_id_t *frame_id) -> bool {
 //    LRU是最近最少用，需要记录一个"最后访问时间"，然后淘汰掉这个时间最靠前的。
 //    if (cur_size_< max_size_) {
-////        如果缓存池还没有满，那就直接返回false
+//        如果缓存池还没有满，那就直接返回false
 //        return false;
 //    }
 //    如果满了，那么就清除第一个即可。
@@ -51,8 +51,6 @@ auto LRUReplacer::Victim(frame_id_t *frame_id) -> bool {
 //    说明所有的frame都是pinned，无法被淘汰
     return false;
 }
-    // 新增方法：查找特定 frame_id 的元素
-    bool FindFrame(frame_id_t frame_id, std::pair<frame_id_t, bool> &result);
 
 void LRUReplacer::Pin(frame_id_t frame_id) {
     std::lock_guard<std::mutex> lock(latch_);  // 获取锁
@@ -63,8 +61,10 @@ void LRUReplacer::Pin(frame_id_t frame_id) {
         // 从链表中移除该帧
         lru_list_.erase(it->second);
         cur_size_--;
+//        哈希表里不用移除，因为会直接被覆盖。
     }
 //   这里pin可能要调用victim，具体未知，需要测试后再知道。
+//把这个新的帧插入到末尾
     lru_list_.push_back(std::make_pair(frame_id, false));
     lru_hash_[frame_id] = lru_list_.insert(lru_list_.end(), std::make_pair(frame_id, false));
     cur_size_++;
