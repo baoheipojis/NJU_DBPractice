@@ -29,6 +29,8 @@ LRUReplacer::LRUReplacer() : cur_size_(0), max_size_(BUFFER_POOL_SIZE) {}
 
 auto LRUReplacer::Victim(frame_id_t *frame_id) -> bool {
 //    LRU是最近最少用，需要记录一个"最后访问时间"，然后淘汰掉这个时间最靠前的。
+    std::lock_guard<std::mutex> lock(latch_);  // 获取锁
+
 //    if (cur_size_< max_size_) {
 //        如果缓存池还没有满，那就直接返回false
 //        return false;
@@ -83,6 +85,7 @@ void LRUReplacer::Unpin(frame_id_t frame_id) {
 }
 
 auto LRUReplacer::Size() -> size_t {
+    std::lock_guard<std::mutex> lock(latch_);
     int size = 0;
     for(auto it = lru_list_.begin(); it!=lru_list_.end(); it++){
         if(it->second == true){
