@@ -59,7 +59,7 @@ auto TableHandle::GetRecord(const RID &rid) -> RecordUptr
   }
   buffer_pool_manager_->UnpinPage(table_id_,rid.PageID(),false);
 //  这里AI生成了大体结构，但是具体的参数不对，参考了其它同学，了解到需要用.get()方法获取普通指针。
-  return RecordUptr(new Record(schema_.get(), data.get(),nullmap.get(),rid));
+  return RecordUptr(new Record(schema_.get(), nullmap.get(),data.get(),rid));
 
 
 }
@@ -74,17 +74,20 @@ auto TableHandle::InsertRecord(const Record &record) -> RID {
 //    WSDB_STUDENT_TODO(l1, t3);
   auto page_handle = CreatePageHandle();
 //get an empty slot in the page
-  auto slot_id = page_handle->GetPage()->GetNextFreePageId();
-  page_handle->WriteSlot(slot_id, record.GetNullMap(), record.GetData(), true);
+  auto slot_id =page_handle->GetPage()->GetNextFreePageId();
+  tab_hdr_.rec_num_++;
+  //第3个参数表示是不是更新，因为我们是插入，那里原来是没有值的，所以这里是false
+  page_handle->WriteSlot(slot_id, record.GetNullMap(), record.GetData(), false);
 //  4. update the bitmap and the number of records in the page header
     BitMap::SetBit(page_handle->GetBitmap(),slot_id,true);
 //    5. if the page is full after inserting the record, update the first free page id in the file header and set the
 //     next page id of the current page
-  if(page_handle->GetPage()->GetNextFreePageId()==tab_hdr_.rec_per_page_){
-      page_handle->GetPage()->SetNextFreePageId(tab_hdr_.first_free_page_);
-      tab_hdr_.first_free_page_=page_handle->GetPage()->GetPageId();
+  if(page_handle->GetPage()->GetRecordNum()==tab_hdr_.rec_per_page_){
+      tab_hdr_.first_free_page_=page_handle->GetPage()->GetNextFreePageId();
+
   }
     buffer_pool_manager_->UnpinPage(table_id_,page_handle->GetPage()->GetPageId(),true);
+
     return RID(page_handle->GetPage()->GetPageId(),slot_id);
 }
 
@@ -103,7 +106,7 @@ void TableHandle::InsertRecord(const RID &rid, const Record &record)
   }
 
 //    * 3. write the record into the slot
-  page_handle->WriteSlot(rid.SlotID(), record.GetNullMap(), record.GetData(), true);
+  page_handle->WriteSlot(rid.SlotID(), record.GetNullMap(), record.GetData(), false);
 //    * 4. update the bitmap and the number of records in the page header
   BitMap::SetBit(page_handle->GetBitmap(),rid.SlotID(),true);
 //    * 5. if the page is full after inserting the record, update the first free page id in the file header and set the
