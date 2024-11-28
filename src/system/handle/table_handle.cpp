@@ -36,7 +36,10 @@ TableHandle::TableHandle(DiskManager *disk_manager, BufferPoolManager *buffer_po
   if (storage_model_ == PAX_MODEL) {
     field_offset_.resize(schema_->GetFieldCount());
     // calculate offsets of fields
-    WSDB_STUDENT_TODO(l1, f2);
+//    WSDB_STUDENT_TODO(l1, f2);
+    for (size_t i = 0; i < schema_->GetFieldCount(); i++) {
+      field_offset_[i] = schema_->GetFieldOffset(i);
+    }
   }
 }
 
@@ -44,24 +47,109 @@ auto TableHandle::GetRecord(const RID &rid) -> RecordUptr
 {
   auto nullmap = std::make_unique<char[]>(tab_hdr_.nullmap_size_);
   auto data    = std::make_unique<char[]>(tab_hdr_.rec_size_);
-  WSDB_STUDENT_TODO(l1, t3);
+//  WSDB_STUDENT_TODO(l1, t3);
+// 首先根据rid找到page_handle
+  auto page_handle =FetchPageHandle(rid.PageID());
+//  接下来查找有没有记录
+  page_handle->ReadSlot(rid.SlotID(), nullmap.get(), data.get());
+  if(BitMap::GetBit(nullmap.get(),rid.SlotID())){
+//      这里的tid就是fid
+      buffer_pool_manager_->UnpinPage(table_id_,rid.PageID(),false);
+      WSDB_THROW( WSDB_RECORD_MISS, "Record not found");
+  }
+  buffer_pool_manager_->UnpinPage(table_id_,rid.PageID(),false);
+//  这里AI生成了大体结构，但是具体的参数不对，参考了其它同学，了解到需要用.get()方法获取普通指针。
+  return RecordUptr(new Record(schema_.get(), data.get(),nullmap.get(),rid));
+
+
 }
 
-auto TableHandle::GetChunk(page_id_t pid, const RecordSchema *chunk_schema) -> ChunkUptr { WSDB_STUDENT_TODO(l1, f2); }
+auto TableHandle::GetChunk(page_id_t pid, const RecordSchema *chunk_schema) -> ChunkUptr {
+//    WSDB_STUDENT_TODO(l1, f2);
+    auto page_handle =FetchPageHandle(pid);
+    return page_handle->ReadChunk(chunk_schema);
+}
 
-auto TableHandle::InsertRecord(const Record &record) -> RID { WSDB_STUDENT_TODO(l1, t3); }
+auto TableHandle::InsertRecord(const Record &record) -> RID {
+//    WSDB_STUDENT_TODO(l1, t3);
+  auto page_handle = CreatePageHandle();
+//get an empty slot in the page
+  auto slot_id = page_handle->GetPage()->GetNextFreePageId();
+  page_handle->WriteSlot(slot_id, record.GetNullMap(), record.GetData(), true);
+//  4. update the bitmap and the number of records in the page header
+    BitMap::SetBit(page_handle->GetBitmap(),slot_id,true);
+//    5. if the page is full after inserting the record, update the first free page id in the file header and set the
+//     next page id of the current page
+  if(page_handle->GetPage()->GetNextFreePageId()==tab_hdr_.rec_per_page_){
+      page_handle->GetPage()->SetNextFreePageId(tab_hdr_.first_free_page_);
+      tab_hdr_.first_free_page_=page_handle->GetPage()->GetPageId();
+  }
+    buffer_pool_manager_->UnpinPage(table_id_,page_handle->GetPage()->GetPageId(),true);
+    return RID(page_handle->GetPage()->GetPageId(),slot_id);
+}
+
 
 void TableHandle::InsertRecord(const RID &rid, const Record &record)
 {
   if (rid.PageID() == INVALID_PAGE_ID) {
     WSDB_THROW(WSDB_PAGE_MISS, fmt::format("Page: {}", rid.PageID()));
   }
-  WSDB_STUDENT_TODO(l1, t3);
+  buffer_pool_manager_->UnpinPage(table_id_,rid.PageID(),false);
+  auto page_handle = FetchPageHandle(rid.PageID());
+//    * 2. fetch the page handle and check the bitmap, if the slot is not empty, throw WSDB_RECORD_EXISTS
+  if(BitMap::GetBit(page_handle->GetBitmap(),rid.SlotID())){
+      buffer_pool_manager_->UnpinPage(table_id_,rid.PageID(),false);
+      WSDB_THROW(WSDB_RECORD_EXISTS,fmt::format("Record: {}",rid.SlotID()));
+  }
+
+//    * 3. write the record into the slot
+  page_handle->WriteSlot(rid.SlotID(), record.GetNullMap(), record.GetData(), true);
+//    * 4. update the bitmap and the number of records in the page header
+  BitMap::SetBit(page_handle->GetBitmap(),rid.SlotID(),true);
+//    * 5. if the page is full after inserting the record, update the first free page id in the file header and set the
+//     next page id of the current page
+  if(page_handle->GetPage()->GetNextFreePageId()==tab_hdr_.rec_per_page_){
+      page_handle->GetPage()->SetNextFreePageId(tab_hdr_.first_free_page_);
+      tab_hdr_.first_free_page_=page_handle->GetPage()->GetPageId();
+  }
+  buffer_pool_manager_->UnpinPage(table_id_,rid.PageID(),true);
+
+//    WSDB_STUDENT_TODO(l1, t3);
 }
 
-void TableHandle::DeleteRecord(const RID &rid) { WSDB_STUDENT_TODO(l1, t3); }
+void TableHandle::DeleteRecord(const RID &rid) {
+//    * 1. if the slot is empty, unpin the page and throw WSDB_RECORD_MISS
+  auto page_handle =FetchPageHandle(rid.PageID());
+  if(!BitMap::GetBit(page_handle->GetBitmap(),rid.SlotID())){
+      buffer_pool_manager_->UnpinPage(table_id_,rid.PageID(),false);
+      WSDB_THROW(WSDB_RECORD_MISS,fmt::format("Record: {}",rid.SlotID()));
+  }
+//    * 2. update the bitmap and the number of records in the page header
+    BitMap::SetBit(page_handle->GetBitmap(),rid.SlotID(),false);
+  page_handle->GetPage()->SetRecordNum(page_handle->GetPage()->GetRecordNum()-1);
 
-void TableHandle::UpdateRecord(const RID &rid, const Record &record) { WSDB_STUDENT_TODO(l1, t3); }
+//    * 3. if the page is not full after deleting the record, update the first free page id in the file header and the next
+//    * page id in the page header
+  if(page_handle->GetPage()->GetRecordNum()==tab_hdr_.rec_per_page_-1){
+      page_handle->GetPage()->SetNextFreePageId(tab_hdr_.first_free_page_);
+      tab_hdr_.first_free_page_=page_handle->GetPage()->GetPageId();
+  }
+  buffer_pool_manager_->UnpinPage(table_id_,rid.PageID(),true);
+//    WSDB_STUDENT_TODO(l1, t3);
+}
+
+void TableHandle::UpdateRecord(const RID &rid, const Record &record) {
+//    WSDB_STUDENT_TODO(l1, t3);
+//   * 1. if the slot is empty, unpin the page and throw WSDB_RECORD_MISS
+  auto page_handle =FetchPageHandle(rid.PageID());
+  if(!BitMap::GetBit(page_handle->GetBitmap(),rid.SlotID())){
+      buffer_pool_manager_->UnpinPage(table_id_,rid.PageID(),false);
+      WSDB_THROW(WSDB_RECORD_MISS,fmt::format("Record: {}",rid.SlotID()));
+  }
+  page_handle->WriteSlot(rid.SlotID(), record.GetNullMap(), record.GetData(), true);
+  buffer_pool_manager_->UnpinPage(table_id_,rid.PageID(),true);
+
+}
 
 auto TableHandle::FetchPageHandle(page_id_t page_id) -> PageHandleUptr
 {
