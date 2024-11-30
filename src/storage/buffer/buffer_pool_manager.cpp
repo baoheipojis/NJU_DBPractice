@@ -151,12 +151,10 @@ auto BufferPoolManager::FlushPage(file_id_t fid, page_id_t pid) -> bool {
 
 auto BufferPoolManager::FlushAllPages(file_id_t fid) -> bool {
     bool returnValue = true;
-    for(auto iter = page_frame_lookup_.begin(); iter != page_frame_lookup_.end();){
+    for(auto iter = page_frame_lookup_.begin(); iter != page_frame_lookup_.end();iter++){
         if(iter->first.fid == fid){
             returnValue&=FlushPage(iter->first.fid, iter->first.pid);
-            iter = page_frame_lookup_.begin();
         }
-        else iter++;
     }
     return returnValue;
 }
