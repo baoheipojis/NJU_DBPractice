@@ -73,9 +73,12 @@ auto TableHandle::GetChunk(page_id_t pid, const RecordSchema *chunk_schema) -> C
 auto TableHandle::InsertRecord(const Record &record) -> RID {
 //    WSDB_STUDENT_TODO(l1, t3);
   auto page_handle = CreatePageHandle();
-//get an empty slot in the page
-  auto slot_id =page_handle->GetPage()->GetNextFreePageId();
+//通过页的位掩码来查找空闲位置。
+auto bitmap = page_handle->GetBitmap();
+  auto slot_id =BitMap::FindFirst(bitmap,tab_hdr_.rec_per_page_,0,false);
+    assert(slot_id!=tab_hdr_.rec_per_page_);
   tab_hdr_.rec_num_++;
+  page_handle->GetPage()->SetRecordNum(page_handle->GetPage()->GetRecordNum()+1);
   //第3个参数表示是不是更新，因为我们是插入，那里原来是没有值的，所以这里是false
   page_handle->WriteSlot(slot_id, record.GetNullMap(), record.GetData(), false);
 //  4. update the bitmap and the number of records in the page header
