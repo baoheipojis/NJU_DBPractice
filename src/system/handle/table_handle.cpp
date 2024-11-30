@@ -51,13 +51,15 @@ auto TableHandle::GetRecord(const RID &rid) -> RecordUptr
 // 首先根据rid找到page_handle
   auto page_handle =FetchPageHandle(rid.PageID());
 //  接下来查找有没有记录
-  page_handle->ReadSlot(rid.SlotID(), nullmap.get(), data.get());
-  if(BitMap::GetBit(nullmap.get(),rid.SlotID())){
+
+  if(!BitMap::GetBit(page_handle->GetBitmap(),rid.SlotID())){
 //      这里的tid就是fid
       buffer_pool_manager_->UnpinPage(table_id_,rid.PageID(),false);
       WSDB_THROW( WSDB_RECORD_MISS, "Record not found");
   }
-  buffer_pool_manager_->UnpinPage(table_id_,rid.PageID(),false);
+    page_handle->ReadSlot(rid.SlotID(), nullmap.get(), data.get());
+
+    buffer_pool_manager_->UnpinPage(table_id_,rid.PageID(),false);
 //  这里AI生成了大体结构，但是具体的参数不对，参考了其它同学，了解到需要用.get()方法获取普通指针。
   return RecordUptr(new Record(schema_.get(), nullmap.get(),data.get(),rid));
 
