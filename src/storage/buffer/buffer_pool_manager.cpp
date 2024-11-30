@@ -184,23 +184,20 @@ void BufferPoolManager::UpdateFrame(frame_id_t frame_id, file_id_t fid, page_id_
     page_id_t old_pid=frame->GetPage()->GetPageId();
     if(frame->IsDirty()){
 //        如果旧页是脏的，那么写回
-        auto frame1 = GetFrame(old_fid, old_pid);
-        if(frame1 != nullptr&&frame1->IsDirty()){
             disk_manager_->WritePage(old_fid, old_pid, frames_[page_frame_lookup_[{old_fid, old_pid}]].GetPage()->GetData());
-        }
     }
 //    注意，这里还需要删除所有page_frame_lookup中的值。
     page_frame_lookup_.erase({old_fid, old_pid});
 
     frame->Reset();
-    char data[PAGE_SIZE];
-    disk_manager_->ReadPage(fid, pid, data);
-    strcpy(frame->GetPage()->GetData(),data);
+
+    disk_manager_->ReadPage(fid, pid, frame->GetPage()->GetData());
     frame->GetPage()->SetFilePageId(fid, pid);
     frame->SetDirty(false);
     frame->Pin();
     replacer_->Pin(frame_id);
     page_frame_lookup_.insert({{fid, pid}, frame_id});
+
 }
 
 auto BufferPoolManager::GetFrame(file_id_t fid, page_id_t pid) -> Frame *
